@@ -1,5 +1,5 @@
 {
-  "name": "SubQuantum Grid Observer",
-  "description": "A React web application to visualize a multi-agent environment influenced by a SubQuantum system, with event narration powered by the Gemini API. Agents navigate a grid, collect resources, and experience dynamic effects.",
+  "name": "AI Story Weaver",
+  "description": "An AI-powered collaborative writing tool to generate and extend stories using Gemini API. Users can provide prompts, manage book content, and customize generation settings like context window size and weighting strategies.",
   "requestFramePermissions": []
 }

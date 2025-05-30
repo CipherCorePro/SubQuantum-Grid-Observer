@@ -23,30 +23,56 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({ initialSettings, presets,
 
     if (type === 'number') {
       processedValue = parseFloat(value);
-      if (isNaN(processedValue)) processedValue = 0; // or keep original string, or ""
+      if (isNaN(processedValue)) {
+        // Attempt to handle empty string or invalid number more gracefully.
+        const originalSetting = DEFAULT_SIMULATION_SETTINGS[name as keyof SimulationSettings];
+        // Ensure processedValue is number for number fields, matching SimulationSettings types
+        processedValue = typeof originalSetting === 'number' ? 0 : (originalSetting || 0); 
+      }
     } else if (type === 'checkbox') {
       processedValue = (e.target as HTMLInputElement).checked;
     }
     
-    setCurrentSettings(prev => ({ ...prev, [name]: processedValue }));
+    setCurrentSettings(prev => ({ ...prev, [name]: processedValue as any })); // Cast to any here is for general compatibility, SimulationSettings types are the source of truth
   };
   
   const handlePresetSelect = (e: ChangeEvent<HTMLSelectElement>) => {
     const presetName = e.target.value;
     const selectedPreset = presets.find(p => p.name === presetName);
     if (selectedPreset) {
-      // Apply preset values over default to ensure all fields are present
       setCurrentSettings(prev => ({
-        ...DEFAULT_SIMULATION_SETTINGS, // Start with full default structure
-        ...prev, // Keep any existing non-default values if not in preset
-        ...selectedPreset.settings // Override with preset specific values
+        ...DEFAULT_SIMULATION_SETTINGS, 
+        // ...prev, // Spreading prev first might be better to ensure all default fields are present
+        ...selectedPreset.settings // Then apply preset specifics
       }));
     }
   };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    onApplySettings(currentSettings);
+    // Ensure all number fields are indeed numbers before applying
+    const validatedSettings = { ...currentSettings };
+    for (const key in validatedSettings) {
+        if (Object.prototype.hasOwnProperty.call(validatedSettings, key)) {
+            const typedKey = key as keyof SimulationSettings;
+            // Check against DEFAULT_SIMULATION_SETTINGS to identify numeric fields
+            if (typeof DEFAULT_SIMULATION_SETTINGS[typedKey] === 'number') {
+                // Ensure the value is a number; if not (e.g. from bad state), parse or default.
+                const currentValue = validatedSettings[typedKey];
+                const numVal = parseFloat(String(currentValue));
+
+                if (isNaN(numVal)) {
+                    // If parsing fails (e.g. it was an empty string or malformed),
+                    // fall back to the default value for that specific numeric setting.
+                    validatedSettings[typedKey] = DEFAULT_SIMULATION_SETTINGS[typedKey];
+                } else {
+                    validatedSettings[typedKey] = numVal;
+                }
+            }
+            // Boolean fields are typically handled by their 'checked' state and should be correct.
+        }
+    }
+    onApplySettings(validatedSettings);
   };
 
   const renderInputField = (label: string, name: keyof SimulationSettings, type: string = 'number', step: string = "1", min?: string, max?: string) => (
@@ -56,7 +82,7 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({ initialSettings, presets,
         type={type}
         id={name}
         name={name}
-        value={currentSettings[name] as any}
+        value={String(currentSettings[name])} // Explicitly convert to string for the input value
         onChange={handleChange}
         step={step}
         min={min}
@@ -72,7 +98,7 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({ initialSettings, presets,
         type="checkbox"
         id={name}
         name={name}
-        checked={currentSettings[name] as boolean}
+        checked={Boolean(currentSettings[name])} // Ensure it's a boolean for the checkbox
         onChange={handleChange}
         className="h-4 w-4 text-indigo-600 border-gray-500 rounded focus:ring-indigo-500 bg-gray-700"
       />
@@ -130,11 +156,11 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({ initialSettings, presets,
                 {renderInputField("SQS F Phase", "sqsFPhase", "number", "0.0001", "0.0001", "0.1")}
                 {renderInputField("SQS Noise Factor", "sqsNoiseFactor", "number", "0.01", "0", "1")}
                 {renderInputField("SQS Threshold S", "sqsThresholdS", "number", "0.01", "0.1", "1.5")}
-                {renderInputField("SQS Decimal Precision", "sqsDecimalPrecision", "number", "1", "1", "5")}
+                {renderInputField("SQS Decimal Precision", "sqsDecimalPrecision", "number", "1", "0", "5")}
                 {renderInputField("SQS Max Sim Time Period", "sqsMaxSimTimePeriod", "number", "10", "50", "2000")}
                 {renderInputField("SQS Re(s) Projection C", "sqsReSProjectionC", "number", "0.01", "0.01", "1")}
                 {renderInputField("SQS Comm Threshold Factor", "sqsCommThresholdFactor", "number", "0.01", "0.1", "1")}
-                {renderInputField("SQS Comm Decimal Precision", "sqsCommDecimalPrecision", "number", "1", "1", "5")}
+                {renderInputField("SQS Comm Decimal Precision", "sqsCommDecimalPrecision", "number", "1", "0", "5")}
             </div>
         </fieldset>
 

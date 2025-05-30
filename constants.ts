@@ -1,126 +1,49 @@
 
-import { ResourceType, SimulationSettings, Preset } from './types';
+import { WeightingStrategyType, Settings } from './types'; // FIX: Import Settings
 
-// Non-Dynamic Constants (or less frequently changed)
-export const CELL_SIZE_PX = 28; // Adjust for desired visual size
-export const AGENT_COLORS = ["bg-red-500", "bg-green-500", "bg-blue-500", "bg-yellow-500"];
-export const CHARGING_STATION_POSITION = { r: 0, c: 0 };
+export const DEFAULT_PROMPT: string = "Schreibe den ersten Satz eines spannenden Fantasy-Romans.";
+export const GEMINI_MODEL_NAME: string = 'gemini-2.5-flash-preview-04-17'; // As per guidelines
 
-export const RESOURCE_COLORS: Record<ResourceType, string> = {
-  [ResourceType.EMPTY]: "bg-gray-200",
-  [ResourceType.ORE]: "bg-gray-500",
-  [ResourceType.TREE]: "bg-green-700",
-  [ResourceType.WATER]: "bg-blue-600",
-  [ResourceType.PLANT]: "bg-teal-500",
-  [ResourceType.OBSTACLE]: "bg-neutral-800",
-  [ResourceType.NEW_RESOURCE]: "bg-yellow-400",
-  [ResourceType.GOAL]: "bg-red-700",
-  [ResourceType.CHARGING_STATION]: "bg-purple-600",
-};
-
-export const RESOURCE_NAMES: Record<ResourceType, string> = {
-  [ResourceType.EMPTY]: "Empty",
-  [ResourceType.ORE]: "Ore",
-  [ResourceType.TREE]: "Tree",
-  [ResourceType.WATER]: "Water",
-  [ResourceType.PLANT]: "Energy Plant",
-  [ResourceType.OBSTACLE]: "Obstacle",
-  [ResourceType.NEW_RESOURCE]: "Nova Crystal",
-  [ResourceType.GOAL]: "Target Beacon",
-  [ResourceType.CHARGING_STATION]: "Charging Station",
-};
-
-export const RESOURCE_CONFIG: Partial<Record<ResourceType, number>> = {
-  [ResourceType.ORE]: 0.08,
-  [ResourceType.TREE]: 0.06,
-  [ResourceType.WATER]: 0.05,
-  [ResourceType.PLANT]: 0.03,
-  [ResourceType.NEW_RESOURCE]: 0.02,
-};
-
-
-// Default Simulation Settings
-export const DEFAULT_SIMULATION_SETTINGS: SimulationSettings = {
-  gridRows: 20,
-  gridCols: 20,
-  numAgents: 2,
-  initialEnergy: 200,
-  energyDepletionRate: 0.5,
-  resourceRechargeAmount: 20,
-  plantRechargeMultiplier: 2,
-  obstacleDensity: 0.05,
-  resourceRespawnRate: 0.01,
-  agentBaseSpeed: 1,
-  agentBaseCarryCapacity: 2,
-  lowEnergyThreshold: 50, // Absolute value, can be calculated as INITIAL_ENERGY * 0.25 in logic if needed
-  chargingStationRechargePerStep: 15,
-
-  sqsFEnergy: 0.008,
-  sqsFPhase: 0.0082,
-  sqsNoiseFactor: 0.03,
-  sqsThresholdS: 0.96,
-  sqsDecimalPrecision: 3,
-  sqsMaxSimTimePeriod: 500,
-  sqsReSProjectionC: 0.10,
-  sqsCommThresholdFactor: 0.90,
-  sqsCommDecimalPrecision: 2,
-
-  sqkEffectBaseDurationMin: 20,
-  sqkEffectBaseDurationMax: 40,
-  sqkSpeedBoostMultiplierMin: 1.3,
-  sqkSpeedBoostMultiplierMax: 1.8,
-  
-  simulationTickMs: 200,
-  showInternalWaveValues: false,
-};
-
-// Simulation Presets
-export const PRESETS: Preset[] = [
-  {
-    name: "Default",
-    settings: { ...DEFAULT_SIMULATION_SETTINGS },
-  },
-  {
-    name: "Chaotisch",
-    settings: {
-      sqsNoiseFactor: 0.25,
-      sqsThresholdS: 0.85,
-      sqsFEnergy: 0.02,
-      sqsFPhase: 0.025,
-      sqkEffectBaseDurationMin: 10,
-      sqkEffectBaseDurationMax: 25,
-      resourceRespawnRate: 0.05,
-      energyDepletionRate: 0.7,
-    },
-  },
-  {
-    name: "Harmonisch",
-    settings: {
-      sqsNoiseFactor: 0.01,
-      sqsThresholdS: 0.98,
-      sqsFEnergy: 0.005,
-      sqsFPhase: 0.005, // Same frequency, more coherence
-      sqkEffectBaseDurationMin: 30,
-      sqkEffectBaseDurationMax: 60,
-      sqsCommThresholdFactor: 0.95,
-      energyDepletionRate: 0.3,
-    },
-  },
-  {
-    name: "Resonanzanfällig",
-    settings: {
-      sqsThresholdS: 0.90,
-      sqsDecimalPrecision: 2, // Easier to match
-      sqsCommDecimalPrecision: 1,
-      sqsCommThresholdFactor: 0.85,
-    }
-  },
-  {
-    name: "Resonanzresistent",
-    settings: {
-        sqsThresholdS: 1.1, // Harder to reach
-        sqsDecimalPrecision: 4, // Harder to match
-        sqsNoiseFactor: 0.05,
-    }
-  }
+export const GERMAN_STOPWORDS: string[] = [
+  "aber", "alle", "allem", "allen", "aller", "alles", "als", "also", "am", "an", "ander", "andere", 
+  "anderem", "anderen", "anderer", "anderes", "anderm", "andern", "anderr", "anders", "auch", "auf", 
+  "aus", "bei", "bin", "bis", "bist", "da", "damit", "dann", "der", "den", "des", "dem", "die", "das", 
+  "dass", "daß", "derselbe", "derselben", "denselben", "desselben", "demselben", "dieselbe", "dieselben", 
+  "dasselbe", "dazu", "dein", "deine", "deinem", "deinen", "deiner", "deines", "denn", "derer", "dessen", 
+  "dich", "dir", "du", "dies", "diese", "diesem", "diesen", "dieser", "dieses", "doch", "dort", "durch", 
+  "ein", "eine", "einem", "einen", "einer", "eines", "einig", "einige", "einigem", "einigen", "einiger", 
+  "einiges", "einmal", "er", "ihn", "ihm", "es", "etwas", "euer", "eure", "eurem", "euren", "eurer", 
+  "eures", "für", "gegen", "gewesen", "hab", "habe", "haben", "hat", "hatte", "hatten", "hier", "hin", 
+  "hinter", "ich", "mich", "mir", "ihr", "ihre", "ihrem", "ihren", "ihrer", "ihres", "euch", "im", "in", 
+  "indem", "ins", "ist", "jede", "jedem", "jeden", "jeder", "jedes", "jene", "jenem", "jenen", "jener", 
+  "jenes", "jetzt", "kann", "kein", "keine", "keinem", "keinen", "keiner", "keines", "können", "könnte", 
+  "machen", "man", "manche", "manchem", "manchen", "mancher", "manches", "mein", "meine", "meinem", 
+  "meinen", "meiner", "meines", "mit", "muss", "musste", "nach", "nicht", "nichts", "noch", "nun", 
+  "nur", "ob", "oder", "ohne", "sehr", "sein", "seine", "seinem", "seinen", "seiner", "seines", "selbst", 
+  "sich", "sie", "ihnen", "sind", "so", "solche", "solchem", "solchen", "solcher", "solches", "soll", 
+  "sollte", "sondern", "sonst", "über", "um", "und", "uns", "unsere", "unserem", "unseren", "unser", 
+  "unseres", "unter", "viel", "vom", "von", "vor", "während", "war", "waren", "warst", "was", "weg", 
+  "weil", "weiter", "welche", "welchem", "welchen", "welcher", "welches", "wenn", "werde", "werden", 
+  "wieder", "will", "wir", "wird", "wirst", "wo", "wollen", "wollte", "würde", "würden", "zu", "zum", 
+  "zur", "zwar", "zwischen"
 ];
+
+export const TOKENIZER_OPTIONS: string[] = ["tiktoken"]; // As requested, actual implementation simplified
+export const TIKTOKEN_MODEL_OPTIONS: string[] = ["gemini-2.5-flash-preview-04-17", "gpt-3.5-turbo", "gpt-4"]; // Example models for tokenizer config
+
+export const WEIGHTING_STRATEGY_OPTIONS: WeightingStrategyType[] = [
+  WeightingStrategyType.NONE,
+  WeightingStrategyType.POSITION,
+  WeightingStrategyType.KEYWORD,
+  WeightingStrategyType.COMBINED,
+];
+
+export const INITIAL_SETTINGS: Settings = {
+  windowSize: 1000, // Word count proxy
+  tokenizerName: "tiktoken",
+  tiktokenModel: "gemini-2.5-flash-preview-04-17",
+  weightingStrategy: WeightingStrategyType.COMBINED,
+  dynamicWindowSize: true,
+  positionWeightingFactor: 0.5,
+  extraStopwords: "",
+};

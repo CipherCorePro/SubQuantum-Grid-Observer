@@ -1,137 +1,193 @@
 
-import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { Simulation } from './services/simulationService';
-import { SimulationState, Agent as AgentType, SimulationSettings, Preset } from './types';
-import GridDisplay from './components/GridDisplay';
-import InfoPanel from './components/InfoPanel';
-import SettingsPanel from './components/SettingsPanel'; // New
-import { DEFAULT_SIMULATION_SETTINGS, PRESETS } from './constants';
+import React, { useState, useEffect, useCallback } from 'react';
+import { Settings, WeightingStrategyType } from './types';
+import { DEFAULT_PROMPT, INITIAL_SETTINGS } from './constants';
+import * as bookService from './services/bookService';
+import * as textProcessorService from './services/textProcessorService';
+import { generateText as geminiGenerateText } from './services/geminiService';
+
+import SettingsPanel from './components/SettingsPanel';
+import BookDisplay from './components/BookDisplay';
+import ActionButton from './components/ActionButton';
+import LoadingIcon from './components/LoadingIcon';
+import BookOpenIcon from './components/icons/BookOpenIcon';
+import DownloadIcon from './components/icons/DownloadIcon';
+import TrashIcon from './components/icons/TrashIcon';
+import SparklesIcon from './components/icons/SparklesIcon';
+
 
 const App: React.FC = () => {
-  const [appliedSettings, setAppliedSettings] = useState<SimulationSettings>(DEFAULT_SIMULATION_SETTINGS);
-  const [simulationService, setSimulationService] = useState(() => new Simulation(appliedSettings));
-  const [simulationState, setSimulationState] = useState<SimulationState>(simulationService.state);
-  const [selectedAgent, setSelectedAgent] = useState<AgentType | null>(null);
-  const [isRunning, setIsRunning] = useState<boolean>(true);
+  const [bookContent, setBookContent] = useState<string>("");
+  const [userInstructionForNextSegment, setUserInstructionForNextSegment] = useState<string>(DEFAULT_PROMPT); // Renamed for clarity
+  const [settings, setSettings] = useState<Settings>(INITIAL_SETTINGS);
+  const [isLoading, setIsLoading] = useState<boolean>(false);
+  const [error, setError] = useState<string | null>(null);
   const [isSettingsPanelOpen, setIsSettingsPanelOpen] = useState<boolean>(false);
-  
-  // useRef for the simulation instance to ensure step function uses the latest instance
-  const simulationInstanceRef = useRef(simulationService); 
-  // Update ref whenever simulationService changes
-  useEffect(() => {
-    simulationInstanceRef.current = simulationService;
-  }, [simulationService]);
-
-
-  const runSimulationStep = useCallback(async () => {
-    if (!isRunning) return;
-    // Ensure we are using the most current simulation instance from the ref
-    await simulationInstanceRef.current.step();
-    setSimulationState({ ...simulationInstanceRef.current.state });
-  }, [isRunning]); // Removed simulationService from deps as it's handled by ref
 
   useEffect(() => {
-    if (simulationState.agents.length > 0 && !selectedAgent) {
-      setSelectedAgent(simulationState.agents.find(a => a.id === 0) || simulationState.agents[0]);
-    } else if (selectedAgent) {
-      // Keep selected agent updated if it still exists
-      const updatedSelectedAgent = simulationState.agents.find(a => a.id === selectedAgent.id);
-      setSelectedAgent(updatedSelectedAgent || (simulationState.agents.length > 0 ? simulationState.agents[0] : null));
+    const loadedBook = bookService.loadBook();
+    setBookContent(loadedBook);
+    
+    const storedSettings = localStorage.getItem('aiStoryWeaver_settings');
+    if (storedSettings) {
+      try {
+        setSettings(JSON.parse(storedSettings));
+      } catch (e) {
+        console.error("Failed to parse stored settings:", e);
+        localStorage.setItem('aiStoryWeaver_settings', JSON.stringify(INITIAL_SETTINGS)); // Reset to default if corrupt
+      }
     }
-  }, [simulationState.agents]);
-
+  }, []);
 
   useEffect(() => {
-    if (!isRunning) return;
-    // Use simulationTickMs from the *applied* settings for the current simulation
-    const tickMs = simulationInstanceRef.current.state.settings.simulationTickMs;
-    const intervalId = setInterval(() => {
-      runSimulationStep();
-    }, tickMs);
+    localStorage.setItem('aiStoryWeaver_settings', JSON.stringify(settings));
+  }, [settings]);
 
-    return () => clearInterval(intervalId);
-  }, [runSimulationStep, isRunning, simulationState.settings.simulationTickMs]); // Depend on tickMs from state
+  const handleSettingsChange = useCallback(<K extends keyof Settings>(key: K, value: Settings[K]) => {
+    setSettings(prev => ({ ...prev, [key]: value }));
+  }, []);
 
-  const handleSelectAgent = (agent: AgentType | null) => {
-    setSelectedAgent(agent);
+  const handleGenerate = async () => {
+    if (!userInstructionForNextSegment.trim()) {
+      setError("Instruction cannot be empty."); // Updated error message
+      return;
+    }
+    if (!process.env.API_KEY) {
+        setError("Gemini API Key is not configured. Please set the API_KEY environment variable. Generation is disabled.");
+        return;
+    }
+
+    setIsLoading(true);
+    setError(null);
+
+    try {
+      let currentSettings = { ...settings };
+      // Dynamic window size adjustment can still be useful based on instruction length
+      if (settings.dynamicWindowSize && textProcessorService.countWords(userInstructionForNextSegment) < 100) { 
+        currentSettings.windowSize = settings.windowSize * 2;
+      }
+
+      const context = textProcessorService.getContext(bookContent, currentSettings);
+      const generatedText = await geminiGenerateText(userInstructionForNextSegment, context);
+      
+      const updatedBookContent = bookService.appendToBook(bookContent, generatedText);
+      setBookContent(updatedBookContent);
+      setUserInstructionForNextSegment(""); // Clear instruction after successful generation
+    } catch (err: any) {
+      console.error("Generation failed:", err);
+      setError(err.message || "An unknown error occurred during text generation.");
+    } finally {
+      setIsLoading(false);
+    }
   };
 
-  const reinitializeSimulation = (settings: SimulationSettings) => {
-    const newSimService = new Simulation(settings);
-    setSimulationService(newSimService); // This will trigger the useEffect to update simulationInstanceRef
-    setSimulationState(newSimService.state);
-    setSelectedAgent(newSimService.state.agents.length > 0 ? newSimService.state.agents[0] : null);
-    if (!isRunning) setIsRunning(true);
+  const handleClearBook = () => {
+    bookService.clearBook();
+    setBookContent("");
+    setError(null);
   };
 
-  const handleApplySettings = (newSettings: SimulationSettings) => {
-    setAppliedSettings(newSettings);
-    reinitializeSimulation(newSettings);
-    setIsSettingsPanelOpen(false);
+  const handleDownloadBook = () => {
+    bookService.downloadBook(bookContent, "ai_story_weaver_book.txt");
   };
   
-  const handleResetSimulation = () => {
-    // Reset with the currently applied settings, or default if preferred
-    // Using appliedSettings provides a "restart with current config" behavior
-    reinitializeSimulation(appliedSettings); 
+  const handleBookContentChange = (newContent: string) => {
+    setBookContent(newContent);
+    bookService.saveBook(newContent); // Save changes made directly in textarea
   };
-
-  const handleToggleRun = () => {
-    setIsRunning(prev => !prev);
-  };
-
-  const handleToggleSettingsPanel = () => {
-    setIsSettingsPanelOpen(prev => !prev);
-     if (isRunning && !isSettingsPanelOpen) setIsRunning(false); // Pause if opening settings
-  };
-
 
   return (
-    <div className="flex flex-col md:flex-row h-screen bg-gray-900 text-white">
-      <div className="flex-grow p-4 flex flex-col items-center justify-center overflow-auto">
-        <div className="mb-4 flex space-x-2">
-            <button 
-                onClick={handleToggleRun}
-                className={`px-4 py-2 rounded font-semibold transition-colors
-                            ${isRunning 
-                                ? 'bg-red-500 hover:bg-red-600 text-white' 
-                                : 'bg-green-500 hover:bg-green-600 text-white'}`}
-            >
-                {isRunning ? 'Pause Simulation' : 'Resume Simulation'}
-            </button>
-            <button 
-                onClick={handleResetSimulation}
-                className="px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white font-semibold rounded transition-colors"
-            >
-                Reset Simulation
-            </button>
-            <button
-                onClick={handleToggleSettingsPanel}
-                className="px-4 py-2 bg-purple-500 hover:bg-purple-600 text-white font-semibold rounded transition-colors"
-            >
-                {isSettingsPanelOpen ? 'Close Settings' : 'Open Settings'}
-            </button>
+    <div className="min-h-screen flex flex-col bg-gradient-to-br from-slate-900 via-slate-800 to-gray-900 text-slate-100">
+      <header className="p-4 shadow-lg bg-slate-800/50 backdrop-blur-md sticky top-0 z-30">
+        <div className="container mx-auto flex justify-between items-center">
+          <div className="flex items-center space-x-2">
+            <BookOpenIcon className="w-8 h-8 text-sky-400" />
+            <h1 className="text-2xl font-bold text-sky-400">AI Story Weaver</h1>
+          </div>
+          <button 
+            onClick={() => setIsSettingsPanelOpen(!isSettingsPanelOpen)}
+            className="lg:hidden p-2 rounded-md hover:bg-slate-700 transition-colors"
+            aria-label="Toggle settings panel"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-6 h-6">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M10.5 6h9.75M10.5 12h9.75m-9.75 6h9.75M3.75 6H7.5m3 12V6.75M3.75 12h3.75m-3.75 6h3.75M3.75 18v-2.25" />
+            </svg>
+          </button>
         </div>
-        <GridDisplay simulationState={simulationState} />
-      </div>
-      <div className={`w-full md:w-1/3 md:max-w-md lg:max-w-lg xl:max-w-xl bg-gray-800 shadow-lg overflow-y-auto h-full md:h-screen
-                      ${isSettingsPanelOpen ? 'hidden md:block' : ''}`}>
-        <InfoPanel 
-            simulationState={simulationState} 
-            selectedAgent={selectedAgent} 
-            onSelectAgent={handleSelectAgent} 
-        />
-      </div>
-      {isSettingsPanelOpen && (
-        <div className="absolute inset-0 bg-gray-800 bg-opacity-95 z-50 flex items-center justify-center md:static md:w-1/3 md:max-w-md lg:max-w-lg xl:max-w-xl md:h-screen md:overflow-y-auto">
-          <SettingsPanel
-            initialSettings={appliedSettings} // Show last applied settings
-            presets={PRESETS}
-            onApplySettings={handleApplySettings}
-            onClose={handleToggleSettingsPanel}
+      </header>
+
+      <main className="flex-grow container mx-auto p-4 flex flex-col lg:flex-row gap-6">
+        <div className={`lg:w-1/3 xl:w-1/4 ${isSettingsPanelOpen ? 'block' : 'hidden'} lg:block`}>
+          <SettingsPanel 
+            settings={settings} 
+            onSettingsChange={handleSettingsChange}
+            isOpen={isSettingsPanelOpen}
+            onToggle={() => setIsSettingsPanelOpen(false)}
           />
         </div>
-      )}
+        
+        <div className="flex-grow lg:w-2/3 xl:w-3/4 flex flex-col gap-6">
+          <div className="bg-slate-800 p-6 rounded-lg shadow-xl border border-slate-700 flex-grow flex flex-col min-h-[300px] md:min-h-[400px] lg:min-h-[calc(100vh-250px)] max-h-[calc(100vh-200px)]">
+            <BookDisplay content={bookContent} onContentChange={handleBookContentChange} isLoading={isLoading} />
+          </div>
+
+          <div className="bg-slate-800 p-6 rounded-lg shadow-xl border border-slate-700">
+            {error && (
+              <div className="mb-4 p-3 bg-red-700/30 border border-red-500 text-red-300 rounded-md text-sm">
+                {error}
+              </div>
+            )}
+            <textarea
+              value={userInstructionForNextSegment}
+              onChange={(e) => setUserInstructionForNextSegment(e.target.value)}
+              placeholder="Instruct AI on what to write next (e.g., 'Describe the hero's arrival at the castle.' or 'The villain reveals their motive.')"
+              rows={3}
+              className="w-full p-3 bg-slate-700 border border-slate-600 rounded-md focus:ring-sky-500 focus:border-sky-500 text-slate-100 resize-none shadow-inner mb-4"
+              disabled={isLoading}
+              aria-label="Instruction for next story segment"
+            />
+            <div className="flex flex-wrap gap-3 justify-between items-center">
+              <ActionButton
+                onClick={handleGenerate}
+                isLoading={isLoading}
+                disabled={isLoading || !process.env.API_KEY}
+                icon={<SparklesIcon className="w-5 h-5" />}
+                variant="primary"
+                className="flex-grow sm:flex-grow-0"
+              >
+                Generate Next
+              </ActionButton>
+              <div className="flex flex-wrap gap-3">
+                <ActionButton
+                  onClick={handleClearBook}
+                  disabled={isLoading}
+                  icon={<TrashIcon className="w-5 h-5" />}
+                  variant="danger"
+                >
+                  Clear Book
+                </ActionButton>
+                <ActionButton
+                  onClick={handleDownloadBook}
+                  disabled={isLoading || !bookContent}
+                  icon={<DownloadIcon className="w-5 h-5" />}
+                  variant="secondary"
+                >
+                  Download
+                </ActionButton>
+              </div>
+            </div>
+             {!process.env.API_KEY && (
+                <p className="text-xs text-amber-400 mt-3">
+                    Note: API_KEY environment variable is not set. Text generation is disabled.
+                </p>
+            )}
+          </div>
+        </div>
+      </main>
+      
+      <footer className="text-center p-4 text-sm text-slate-500 border-t border-slate-700/50">
+        Powered by Gemini API. Created with React & Tailwind CSS.
+      </footer>
     </div>
   );
 };

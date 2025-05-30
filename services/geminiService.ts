@@ -1,74 +1,71 @@
 
 import { GoogleGenAI, GenerateContentResponse } from "@google/genai";
-import { SQKEffect, SQKEffectType } from '../types';
+import { GEMINI_MODEL_NAME } from '../constants';
 
+// Ensure API_KEY is available. In a real build process (Vite/CRA),
+// this would be import.meta.env.VITE_API_KEY or process.env.REACT_APP_API_KEY.
+// For this environment, we assume process.env.API_KEY is set.
 const API_KEY = process.env.API_KEY;
 
 if (!API_KEY) {
-  console.warn("Gemini API key not found. Set process.env.API_KEY. Narrative generation will be disabled.");
+  console.error("API_KEY for Gemini is not set. Please set the API_KEY environment variable.");
+  // alert("Gemini API Key is not configured. Please set it up to use the generation feature.");
 }
 
 const ai = API_KEY ? new GoogleGenAI({ apiKey: API_KEY }) : null;
-const modelName = 'gemini-2.5-flash-preview-04-17';
 
-function getSQKEffectPrompt(effect: SQKEffect): string {
-  switch (effect.type) {
-    case SQKEffectType.RESOURCE_BOOST:
-      return `
-        In a simulated multi-agent world, a 'SubQuantum Knot' event has just triggered a 'Resource Boost'.
-        This means specific resources on the map will yield more or provide special bonuses for a short duration.
-        Some resource patches are now visibly glowing with enhanced energy.
-        Generate a brief, exciting narrative announcement (around 2-3 sentences) for players about this event.
-        Make it sound like an in-game system announcement.
-      `;
-    case SQKEffectType.AGENT_SPEED_BOOST:
-      const target = effect.details?.targetAgentId === "all" ? "all agents" : `Agent ${effect.details?.targetAgentId}`;
-      const multiplier = effect.details?.speedMultiplier?.toFixed(1) || "significant";
-      return `
-        In a simulated multi-agent world, a 'SubQuantum Knot' event has just triggered an 'Agent Speed Boost'.
-        ${target} will experience a x${multiplier} speed increase for a limited time, allowing for faster movement and exploration.
-        Generate a brief, exciting narrative announcement (around 2-3 sentences) for players about this event.
-        Make it sound like an in-game system announcement.
-      `;
-    case SQKEffectType.GOAL_REVEAL: // This is more conceptual for narrative
-      return `
-        In a simulated multi-agent world, a 'SubQuantum Knot' event has just occurred, creating a 'Goal Harmony'.
-        This may subtly guide agents towards more valuable objectives or reveal hidden opportunities.
-        The ambient SubQuantum energy feels particularly aligned with progress.
-        Generate a brief, evocative narrative announcement (around 2-3 sentences) for players about this event.
-        Make it sound like an in-game system announcement.
-      `;
-    default:
-      return "An unknown SubQuantum event has occurred. Describe it mysteriously.";
-  }
-}
-
-export const generateSQKEffectNarrative = async (effect: SQKEffect): Promise<string | null> => {
+export const generateText = async (
+  userInstruction: string,
+  context: string = ""
+): Promise<string> => {
   if (!ai) {
-    return "Gemini API not available. Event: " + effect.type;
+    return Promise.reject(new Error("Gemini API client is not initialized. Check API_KEY."));
   }
 
-  const prompt = getSQKEffectPrompt(effect);
+  let fullPromptToGemini: string;
+
+  if (context) {
+    // Enhanced prompt to prevent repetition and ensure seamless continuation
+    fullPromptToGemini = `You are an expert AI story writer.
+The story so far is:
+---
+${context}
+---
+Your task is to SEAMLESSLY continue this story. Directly append the next part based on the following instruction. DO NOT repeat any part of the "story so far". Start your response immediately with the new text.
+Instruction: ${userInstruction}`;
+  } else {
+    fullPromptToGemini = `You are an expert AI story writer.
+Your task is to start a new story based on the following instruction.
+Instruction: ${userInstruction}`;
+  }
 
   try {
     const response: GenerateContentResponse = await ai.models.generateContent({
-      model: modelName,
-      contents: prompt,
-      config: {
-        temperature: 0.7,
-        topK: 50,
-        topP: 0.9,
-      }
+      model: GEMINI_MODEL_NAME,
+      contents: fullPromptToGemini,
+      // config: { // Add config if needed, e.g., temperature, topK etc.
+      //   temperature: 0.7
+      // }
     });
     
     const text = response.text;
-    return text.trim();
-
-  } catch (error) {
-    console.error("Error generating narrative with Gemini API:", error);
-    if (error instanceof Error) {
-        return `Error generating narrative: ${error.message}`;
+    if (typeof text !== 'string') {
+        throw new Error("Invalid response format from Gemini API.");
     }
-    return "Error generating narrative.";
+    return text;
+
+  } catch (error: any) {
+    console.error("Error generating text with Gemini:", error);
+    let errorMessage = "Failed to generate text. ";
+    if (error.message) {
+        errorMessage += error.message;
+    }
+    // Specific error handling for common issues
+    if (error.toString().includes("API key not valid")) {
+        errorMessage = "The provided API key is not valid. Please check your API_KEY environment variable.";
+    } else if (error.toString().includes("quota")) {
+        errorMessage = "API quota exceeded. Please try again later.";
+    }
+    throw new Error(errorMessage);
   }
 };
