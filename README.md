@@ -13,6 +13,14 @@ This contains everything you need to run your app locally.
 3. Run the app:
    `npm run dev`
 
+![image](https://github.com/user-attachments/assets/f1343f64-c862-47ee-9993-204c143e4a6e)
+
+![image](https://github.com/user-attachments/assets/ea57fe76-7aeb-4db9-b500-a6bde3729f5b)
+
+![image](https://github.com/user-attachments/assets/c6b9c181-b91a-4e82-a27a-84feab8573da)
+
+
+
 
 # SubQuantum Grid Observer
 
