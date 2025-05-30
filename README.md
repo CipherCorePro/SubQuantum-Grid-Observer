@@ -13,215 +13,264 @@ This contains everything you need to run your app locally.
 3. Run the app:
    `npm run dev`
 
-# SubQG Image Transformer
 
-## 📘 Inhaltsverzeichnis
+# SubQuantum Grid Observer
+
+Der SubQuantum Grid Observer ist eine interaktive Webanwendung, die eine Multi-Agenten-Simulation in einer dynamischen 2D-Grid-Welt visualisiert. Die Besonderheit dieser Simulation ist die Beeinflussung durch ein fiktives "SubQuantenSystem" (SQS), das unvorhersehbare globale Ereignisse auslöst und so die Umgebungsbedingungen und das Verhalten der Agenten beeinflusst. Die narrativen Beschreibungen dieser Ereignisse werden mithilfe der Google Gemini API generiert.
+
+## Inhaltsverzeichnis
+
+1.  [Überblick](#überblick)
+2.  [Technologien](#technologien)
+3.  [Benutzeroberfläche](#benutzeroberfläche)
+    *   [Gitteranzeige](#gitteranzeige)
+    *   [Informationspanel](#informationspanel)
+    *   [Steuerelemente](#steuerelemente)
+    *   [Einstellungspanel (Settings Panel)](#einstellungspanel-settings-panel)
+4.  [Das SubQuantenSystem (SQS)](#das-subquantensystem-sqs)
+    *   [Grundkonzept](#grundkonzept)
+    *   [Wellenmechanik](#wellenmechanik)
+    *   [Globale Knoten (SQK-Ereignisse)](#globale-knoten-sqk-ereignisse)
+    *   [SQK-Effekte](#sqk-effekte)
+    *   [Kommunikationsförderlichkeit](#kommunikationsförderlichkeit)
+    *   [Wichtige SQS-Parameter](#wichtige-sqs-parameter)
+5.  [Agentenverhalten](#agentenverhalten)
+    *   [Grundlagen](#grundlagen)
+    *   [Energie](#energie)
+    *   [Ressourcensammlung](#ressourcensammlung)
+    *   [Niedrigenergie-Logik](#niedrigenergie-logik)
+    *   [Bewegung und Kollision](#bewegung-und-kollision)
+6.  [Google Gemini API Integration](#google-gemini-api-integration)
+7.  [Simulationsablauf](#simulationsablauf)
+8.  [Projektstruktur](#projektstruktur)
+9.  [Setup und Start](#setup-und-start)
+
+## 1. Überblick
+
+Die Anwendung simuliert eine Umgebung, in der mehrere autonome Agenten Ressourcen sammeln, ihre Energie verwalten und auf dynamische Ereignisse reagieren, die vom SubQuantenSystem ausgelöst werden. Ziel ist es, ein visuell ansprechendes und interaktives Erlebnis zu schaffen, das die Komplexität emergenter Systeme und die Auswirkungen unvorhersehbarer externer Faktoren demonstriert. Benutzer können nun viele Simulationsparameter dynamisch anpassen.
+
+## 2. Technologien
+
+*   **React 19:** Für die Erstellung der Benutzeroberfläche.
+*   **TypeScript:** Für typsichere JavaScript-Entwicklung.
+*   **Tailwind CSS:** Für schnelles und responsives UI-Styling.
+*   **Google Gemini API (@google/genai):** Zur Generierung von narrativen Texten für SubQuanten-Ereignisse.
+*   **ESM (über esm.sh):** Für das Laden von Modulen direkt im Browser ohne lokalen Build-Schritt.
+
+## 3. Benutzeroberfläche
+
+Die Benutzeroberfläche ist in zwei Hauptbereiche unterteilt: die Gitteranzeige und das Informationspanel, ergänzt durch Steuerelemente und ein neues Einstellungspanel.
+
+### Gitteranzeige
+
+*   Zeigt das 2D-Gitter an, dessen Größe (`gridRows` x `gridCols`) nun dynamisch über das Einstellungspanel konfiguriert werden kann.
+*   Jede Zelle (`ResourceCell`) stellt einen bestimmten Ressourcentyp (z.B. Erz, Baum, Wasser, Ladestation) oder ein Hindernis dar. Die Farben sind in `constants.ts` definiert.
+*   "Geboostete" Ressourcenzellen (durch einen SQK-Effekt) werden visuell hervorgehoben (pulsierender Rahmen).
+*   Agenten (`AgentSprite`) werden als farbige Kreise dargestellt, die sich über das Gitter bewegen. Ihre Farbe dient zur Unterscheidung. Ein kleiner Balken am unteren Rand des Agenten visualisiert dessen aktuellen Energiestatus relativ zur (ggf. dynamisch angepassten) `initialEnergy`.
+*   Die Größe der Zellen (`CELL_SIZE_PX`) ist aktuell konstant, während die Anzahl der Agenten (`numAgents`) und deren Eigenschaften dynamisch sind.
+
+### Informationspanel
+
+Das Panel auf der rechten Seite zeigt detaillierte Informationen zur laufenden Simulation:
+
+*   **Simulationsstatus:**
+    *   Aktueller Simulationsschritt (`Step`).
+    *   Gesamte Simulationszeit (`SQS Time`), die für die Berechnung der SQS-Wellen relevant ist.
+*   **SubQuantenSystem:**
+    *   Zeigt gerundete Werte der Energie- und Phasenwelle (basierend auf `sqsDecimalPrecision`).
+    *   Optional (via Einstellungspanel): Anzeige der rohen, ungerundeten Wellenwerte.
+    *   Status der Kommunikationsförderlichkeit (OFFEN/GESCHLOSSEN).
+    *   Der `Re(s)` Projektionswert des letzten erkannten globalen Knotens.
+*   **Aktiver SQK-Effekt:**
+    *   Wenn ein SubQuantenKnoten-Effekt aktiv ist, wird dessen Typ, verbleibende Dauer und eine von der Gemini API generierte narrative Beschreibung angezeigt. Dies könnte im Informationspanel beispielsweise so aussehen:
+
+        ```
+        Aktiver SQK-Effekt!
+        Agenten-Geschwindigkeits-Boost
+
+        Dauer: 11 Schritte
+
+        Gemini-Narrativ:
+
+        "[SYSTEMWARNUNG] SubQuantenKnoten detektiert! Alle Agentengeschwindigkeiten sind nun für begrenzte Zeit um x1.7 erhöht. Nutzt diesen Beschleunigungsschub für schnellere Bewegung und verbesserte Erkundung!"
+        ```
+*   **Agentenübersicht:**
+    *   Liste aller Agenten mit ihrer ID und ihrem Energiestatus (relativ zur `initialEnergy` aus den aktuellen Einstellungen).
+    *   Ein Klick auf einen Agenten wählt diesen aus und zeigt detailliertere Informationen an.
+*   **Details des ausgewählten Agenten:**
+    *   Energie (numerisch und als Balken).
+    *   Aktuelle Position (Reihe, Spalte).
+    *   Basisgeschwindigkeit und Tragekapazität (gemäß aktuellen Einstellungen).
+    *   Inventar: Auflistung der gesammelten Ressourcen und deren Mengen.
+    *   Wenn ein Agent keine Energie mehr hat, wird ein "INAKTIV"-Status angezeigt.
 
-1. [Einführung](#einführung)
-2. [Kernkonzept: Transformation und Originalität](#kernkonzept-transformation-und-originalität)
-3. [Funktionsweise im Detail](#funktionsweise-im-detail)
+### Steuerelemente
 
-   * [Bildeingabe](#bildeingabe)
-   * [SubQG-Simulation](#subqg-simulation)
-   * [Riemann-Analogie & Harmony Score](#riemann-analogie--harmony-score)
-   * [Farbanalyse](#farbanalyse)
-   * [Pixel-Transformation (`processImageWithSubQG`)](#pixel-transformation-processimagewithsubqg)
-   * [Nachbearbeitung](#nachbearbeitung)
-   * [Ausgabe](#ausgabe)
-4. [Hauptmerkmale](#hauptmerkmale)
-5. [Technologie-Stack](#technologie-stack)
-6. [Hinweis zur Originalität & Urheberrecht](#hinweis-zur-originalität--urheberrecht)
-7. [Setup & Start (Entwickler)](#setup--start-entwickler)
+Oberhalb der Gitteranzeige befinden sich Schaltflächen zur Steuerung der Simulation:
 
----
+*   **Simulation Anhalten/Fortsetzen:** Schaltet den Simulationsfortschritt um.
+*   **Simulation Zurücksetzen:** Setzt die gesamte Simulation auf ihren Anfangszustand zurück, wobei die aktuell im Einstellungspanel *angewandten* Parameter verwendet werden. Startet die Simulation neu.
+*   **Einstellungen Öffnen/Schließen:** Zeigt das Einstellungspanel an oder verbirgt es. Das Öffnen pausiert die Simulation.
 
-## Einführung
+### Einstellungspanel (Settings Panel)
 
-Der **SubQG Image Transformer** ist eine React-basierte Webanwendung zur tiefgreifenden künstlerischen Bildtransformation. Anders als klassische Filter nutzt sie:
+Ein neues, umfassendes Panel erlaubt die dynamische Anpassung vieler Simulationsparameter:
 
-* eine simulierte **Subquanten-Resonanz (SubQG)**,
-* eine mathematisch inspirierte **Riemann-Analogie** zur Bewertung der Bildharmonie,
-* und eine kontextabhängige **Farbcharakteranalyse**.
+*   **Presets Laden:** Auswahl vordefinierter Konfigurationen (z.B. "Default", "Chaotisch", "Harmonisch").
+*   **Grid & Agenten:**
+    *   `Grid Rows`, `Grid Cols`: Größe des Gitters.
+    *   `Num Agents`: Anzahl der Agenten.
+    *   `Initial Energy`, `Energy Depletion Rate`, `Low Energy Threshold`: Energieparameter der Agenten.
+    *   `Agent Base Speed`, `Agent Carry Capacity`: Basisattribute der Agenten.
+*   **Ressourcen & Aufladen:**
+    *   `Resource Recharge Amount`, `Plant Recharge Multiplier`: Energiemenge beim Sammeln.
+    *   `Obstacle Density`, `Resource Respawn Rate`: Dichte und Nachwachsrate.
+    *   `Charging Station Recharge`: Energiemenge pro Schritt an der Ladestation.
+*   **SubQuantenSystem (SQS):**
+    *   `SQS F Energy`, `SQS F Phase`: Frequenzen der SQS-Wellen.
+    *   `SQS Noise Factor`: Einfluss des Zufallsrauschens auf die Wellen.
+    *   `SQS Threshold S`: Schwellenwert für die Detektion von SQK-Ereignissen.
+    *   `SQS Decimal Precision`: Genauigkeit für Kohärenzprüfung der Wellen.
+    *   `SQS Max Sim Time Period`: Periode der SQS-Wellen.
+    *   `SQS Re(s) Projection C`: Konstante für die Re(s)-Projektion.
+    *   `SQS Comm Threshold Factor`, `SQS Comm Decimal Precision`: Parameter für die Kommunikationsförderlichkeit.
+*   **SQK Effekte & Simulation:**
+    *   `SQK Effect Duration Min/Max`: Minimale und maximale Dauer von SQK-Effekten.
+    *   `SQK Speed Boost Min/Max`: Multiplikatorbereich für Geschwindigkeitsboosts.
+    *   `Simulation Tick (ms)`: Geschwindigkeit der Simulationsschritte.
+*   **Anzeigeoptionen:**
+    *   `Show Internal SQS Wave Values`: Checkbox, um die rohen SQS-Wellenwerte im Info-Panel anzuzeigen.
+*   **Schaltflächen:**
+    *   "Cancel": Schließt das Panel ohne Änderungen zu übernehmen (zeigt wieder die zuletzt angewandten Einstellungen).
+    *   "Apply Settings & Restart": Übernimmt die aktuellen Einstellungen und startet die Simulation mit diesen neuen Parametern neu.
 
-Das Ziel ist kein simples Styling – sondern die algorithmische Erschaffung eines völlig **neuen digitalen Kunstwerks**.
+Änderungen im Einstellungspanel werden erst nach Klick auf "Apply Settings & Restart" wirksam.
 
----
+## 4. Das SubQuantenSystem (SQS)
 
-## Kernkonzept: Transformation & Originalität
+Das SubQuantenSystem ist das Herzstück der dynamischen Ereignisse in der Simulation. Es ist ein fiktives System, dessen Zustand sich über die Zeit ändert und unter bestimmten Bedingungen globale "Knoten" (SQK-Ereignisse) auslösen kann, die die Spielwelt beeinflussen. Viele seiner Parameter sind nun über das Einstellungspanel konfigurierbar.
 
-Die Anwendung erzeugt ein Werk, das strukturell vom Ursprungsbild inspiriert ist, aber **algorithmisch rekonstruiert** wird:
+### Grundkonzept
 
-* **Keine Filter, keine Überblendungen**
-* Stattdessen: **pixelweise Neuberechnung**, moduliert durch globale Felder
-* Das Ergebnis: ein Bild mit **eigener digitaler Signatur**, nicht bloß ein Derivat
+Das SQS wird durch zwei primäre, oszillierende Wellen beschrieben: eine Energiewelle und eine Phasenwelle. Diese Wellen entwickeln sich unabhängig voneinander im Laufe der Simulationszeit. Ihre Interaktion und spezifische Konstellationen führen zu den SQK-Ereignissen.
 
-Diese Vorgehensweise schafft einen **unabhängigen digitalen Output**, vergleichbar mit einem Gemälde, das sich auf eine Fotografie bezieht – aber ein völlig eigenes Werk darstellt.
+### Wellenmechanik
 
----
+*   **Energiewelle (`energyWaveValue`):**
+    *   Wird durch eine Sinusfunktion mit einer spezifischen Frequenz (einstellbar: `sqsFEnergy`) berechnet.
+    *   Die Zeit für die Sinusfunktion wird normalisiert basierend auf `sqsMaxSimTimePeriod`, um eine periodische Entwicklung zu ermöglichen.
+    *   Ein Rauschfaktor (einstellbar: `sqsNoiseFactor`) wird addiert, um eine gewisse Unvorhersehbarkeit einzuführen.
+    *   Der resultierende Wert wird auf einen Bereich von ca. 0 bis 1.5 begrenzt.
+*   **Phasenwelle (`phaseWaveValue`):**
+    *   Funktioniert analog zur Energiewelle, verwendet jedoch eine Frequenz (einstellbar: `sqsFPhase`).
+    *   Auch hier wird Rauschen addiert und der Wert begrenzt.
 
-## Funktionsweise im Detail
+### Globale Knoten (SQK-Ereignisse)
 
-### 🔹 Bildeingabe
+Ein globaler Knoten (SubQuantenKnoten-Ereignis, SQK-Event) tritt auf, wenn folgende Bedingungen gleichzeitig erfüllt sind:
 
-* Nutzer können:
+1.  **Schwellenwertüberschreitung:** Sowohl der Wert der Energiewelle als auch der Wert der Phasenwelle liegen über einem definierten Schwellenwert (einstellbar: `sqsThresholdS`).
+2.  **Wellenkohärenz:** Die auf `sqsDecimalPrecision` (einstellbar) Dezimalstellen gerundeten Werte der Energie- und Phasenwelle sind nahezu identisch.
 
-  * eigene Bilder (JPG, PNG, SVG etc.) hochladen
-  * neue Bilder per Prompt via **Google Gemini API** generieren (Modell: `imagen-3.0-generate-002`)
-* Das Bild wird analysiert und als Ausgangsbasis gespeichert.
+Wenn ein Knoten detektiert wird:
 
----
+*   **Knotenstärke (`knotStrengthMetric`):** Wird als Durchschnitt der beiden Wellenwerte zum Zeitpunkt des Knotens berechnet.
+*   **Re(s)-Projektion:** Ein spekulativer Wert, beeinflusst durch `sqsReSProjectionC` (einstellbar).
+*   Der Knoten wird in der `knotHistory` des SQS gespeichert.
+*   Ein **SQK-Effekt** wird ausgelöst.
 
-### 🔹 SubQG-Simulation
+### SQK-Effekte
 
-* Ein `SubQGSimulator` erzeugt ein **Energie- und Phasenfeld**
-* Konfigurierbare Parameter:
+Wenn ein globaler Knoten auftritt, wird zufällig einer der folgenden Effekte für eine begrenzte Dauer (einstellbar: `sqkEffectBaseDurationMin` bis `sqkEffectBaseDurationMax` Schritte) aktiviert:
 
-  * Simulationsgröße: Bruchteil der Bildgröße (z. B. `Breite / 8`), typischerweise ein niedrigaufgelöstes Gitter (z.B. 64x64 Pixel).
-  * Energie- und Phasenfrequenzen (`f_energy`, `f_phase`)
-  * Rauschanteil (`noise_factor`)
-* **Knotendetektion**: Punkte mit kohärentem Energie- und Phasenwert (Threshold + Rundung) innerhalb des Simulationsgitters.
-* Ergebnis:
-  * `knot_map`: Eine 2D-Karte, die die Dichte und Verteilung der detektierten "Knoten" auf dem niedrigaufgelösten Simulationsgitter darstellt.
-    * **Visualisierung im Interface:** Die im Interface angezeigte "SubQG Knot Map" ist eine direkte, grafische Darstellung dieser *rohen, niedrigaufgelösten* Karte. Ihre Muster (z.B. Cluster-Bildungen oder diffuse Verteilungen) sind ein direktes Ergebnis der gewählten Simulationsparameter (Frequenzen, Schwellenwert etc.) und geben einen Einblick in die rohen Simulationsdaten, *bevor* diese für die Bildtransformation weiterverarbeitet werden.
-  * Für die eigentliche Bildtransformation wird diese niedrigaufgelöste `knot_map` auf die volle Auflösung des Eingangsbildes **hochskaliert und interpoliert**.
-  * Diese *skalierte* Karte (`resizedKnotMap`) dient dann als Basis für die globale Modulation der Bildwerte im nächsten Schritt.
+*   **`RESOURCE_BOOST` (Ressourcen-Boost):** Details wie oben beschrieben.
+*   **`AGENT_SPEED_BOOST` (Agenten-Geschwindigkeits-Boost):** Multiplikator (einstellbar: `sqkSpeedBoostMultiplierMin` bis `sqkSpeedBoostMultiplierMax`).
+*   **`GOAL_REVEAL` (Ziel-Enthüllung):** Primär narrativer Natur.
 
----
+### Kommunikationsförderlichkeit (`isCommunicationConducive`)
 
-### 🔹 Riemann-Analogie & Harmony Score
+Bestimmt durch SQS-Wellen und die Parameter `sqsCommThresholdFactor` und `sqsCommDecimalPrecision` (beide einstellbar).
 
-* Analyse der Knotendaten aus der `knot_map`:
+### Wichtige SQS-Parameter
 
-  * Mittelwert, Standardabweichung, Median der "projizierten Re(s)-Werte" der Knoten.
-* Abgeleitet: ein `harmony_score` ∈ \[0, 1]
-* Bedeutung:
+Viele dieser Parameter sind nun über das Einstellungspanel zugänglich und modifizierbar (siehe Abschnitt Einstellungspanel).
 
-  * Hoch (nahe 1) = tendenziell kohärente, ruhige, harmonische Knotenanordnung in der Simulation.
-  * Niedrig (nahe 0) = tendenziell chaotische, unruhige, unregelmäßige Knotenanordnung.
-* Beeinflusst die globale Modulationsintensität, die Farbverschiebung und die Nachbearbeitungseffekte (Schärfe/Unschärfe) des gesamten Bildes. Eine animierte Farbwelle im Interface visualisiert diesen Wert dynamisch.
+## 5. Agentenverhalten
 
----
+Das Verhalten der Agenten wird durch ihre internen Zustände und die (nun dynamisch konfigurierbaren) Umgebungsparameter bestimmt.
 
-### 🔹 Farbanalyse
+### Grundlagen
 
-* Dominante Farben werden aus dem Eingangsbild extrahiert.
-* Diese werden zu "Aktivierungswerten" für vordefinierte Farbkategorien (Rot, Grün, Blau, Cyan etc.) umgewandelt.
-* Dient der **farbabhängigen Modulation** der Basis-Helligkeit und des Kontrasts während der Transformation.
+*   Anzahl der Agenten (`numAgents`), Basisgeschwindigkeit (`agentBaseSpeed`) und Tragekapazität (`agentBaseCarryCapacity`) sind einstellbar.
+*   Agenten starten mit `initialEnergy` (einstellbar).
 
----
+### Energie
 
-### 🔹 Pixel-Transformation (`processImageWithSubQG`)
+*   Energieverlust pro Schritt (`energyDepletionRate`) und Energiegewinn durch Ressourcen (`resourceRechargeAmount`, `plantRechargeMultiplier`) sind einstellbar.
+*   Das Aufladen an der `CHARGING_STATION_POSITION` gibt `chargingStationRechargePerStep` Energie (einstellbar).
 
-Dieser Schritt findet für **jeden einzelnen Pixel** des Originalbildes statt:
+### Ressourcensammlung
 
-1. Die zuvor generierte, niedrigaufgelöste `knot_map` wird auf die volle Auflösung des Eingangsbildes skaliert und interpoliert, wodurch die `resizedKnotMap` entsteht.
-2. Für **jeden Pixel** des Bildes:
-   * Die ursprünglichen RGB-Werte des Pixels werden gelesen.
-   * Eine Basis-Anpassung von Helligkeit und Kontrast erfolgt basierend auf den globalen Slider-Einstellungen und den `categoryActivations` (aus der Farbanalyse).
-   * Ein sogenanntes **"SubQG Wave Field"** wird für die aktuelle Pixelposition berechnet. Dieses Feld entsteht durch die Kombination von Sinuswellen, deren Eigenschaften von folgenden Faktoren beeinflusst werden:
-     * den normierten (x,y)-Koordinaten des aktuellen Pixels,
-     * dem interpolierten Wert aus der **`resizedKnotMap`** (der hochskalierten Knot Map) an der Position des Pixels,
-     * dem globalen `harmony_score`.
-   * Der resultierende Wert dieses `fieldInfluence` (Einfluss des Wellenfeldes) an der Pixelposition moduliert dann kontinuierlich:
-     * die **globale Farbverschiebung** (Farbtemperatur und Sättigung), die primär vom `harmonyScore` gesteuert wird.
-     * die **lokale Helligkeit** des Pixels, was zu sanften, wellenartigen Helligkeitsvariationen über das gesamte Bild führt.
-3. Die modifizierten RGB-Werte werden auf den gültigen Bereich \[0, 255] geklemmt und in die neue Bilddatenstruktur (`ImageData`) geschrieben.
+Logik bleibt gleich, aber die Energiemengen sind dynamisch.
 
-Das Ergebnis ist ein vollständig neu berechnetes und moduliertes Bild, dessen Transformation auf kontinuierlichen Feldern basiert und somit punktuelle Effekte oder künstliche Artefakte vermeidet, die von einzelnen "Knoten" herrühren könnten.
+### Niedrigenergie-Logik (`chooseActionForAgent`)
 
----
+Agenten versuchen bei niedrigem Energiestand (definiert durch `lowEnergyThreshold`, einstellbar) zur Ladestation zu gelangen.
 
-### 🔹 Nachbearbeitung
+### Bewegung und Kollision
 
-* Abhängig vom `harmony_score` werden globale Filtereffekte angewendet:
-  * `harmony_score` > 0.75 → leichte Schärfung und Kontrasterhöhung.
-  * `harmony_score` < 0.25 → leichte Weichzeichnung (Gaußscher Weichzeichner).
-* Das Bild wird auf die vom Nutzer gewählte Ausgabeauflösung skaliert.
+Die Gittergröße (`gridRows`, `gridCols`) und Hindernisdichte (`obstacleDensity`) sind einstellbar und beeinflussen die Bewegungsmöglichkeiten.
 
----
+## 6. Google Gemini API Integration
 
-### 🔹 Ausgabe
+Die Integration der Gemini API zur Generierung narrativer Texte für SQK-Ereignisse bleibt unverändert. Der API-Schlüssel muss weiterhin als Umgebungsvariable `process.env.API_KEY` bereitgestellt werden.
 
-* Das transformierte Bild wird als `dataURL` generiert und im Browser angezeigt.
-* Ein Download des Bildes (typischerweise als PNG) ist möglich.
-* Statistiken zur SubQG-Simulation und der Riemann-Analyse (`harmony_score`) werden neben dem Bild angezeigt.
+## 7. Simulationsablauf
 
----
+1.  Die Simulation wird mit den `DEFAULT_SIMULATION_SETTINGS` oder den zuletzt angewandten Einstellungen aus dem Einstellungspanel initialisiert.
+2.  In jedem Simulationsschritt (`simulationTickMs`, einstellbar):
+    *   Das SQS aktualisiert seine Wellenwerte.
+    *   Wenn ein SQK-Ereignis detektiert wird, wird ein entsprechender Effekt aktiviert und eine narrative Beschreibung von Gemini angefordert.
+    *   Aktive SQK-Effekte werden dekrementiert und ggf. beendet.
+    *   Jeder aktive Agent wählt eine Aktion basierend auf seinem Zustand und der Umgebung (inkl. Niedrigenergie-Logik).
+    *   Aktionen werden ausgeführt (Bewegung, Sammeln, Aufladen).
+    *   Energie wird verbraucht/gewonnen.
+    *   Ressourcen können nachwachsen (`resourceRespawnRate`, einstellbar).
+    *   Der Zustand wird aktualisiert und im UI gerendert.
+3.  Der Benutzer kann die Simulation pausieren, fortsetzen, zurücksetzen oder die Einstellungen über das Panel ändern (was zu einem Neustart mit den neuen Parametern führt).
 
-## Hauptmerkmale
+## 8. Projektstruktur
 
-* 🎨 Individuelle Bildtransformation durch Simulation eines physikalisch inspirierten Feldes.
-* ⚙️ Vollständig parametrisierbar (Simulationsparameter, globale Transformationen).
-* 🔁 Jedes Ergebnis ist potenziell **einzigartig** durch die Kombination von Parametern und der internen Dynamik der Simulation (z.B. zufällige Phasenoffsets im Wellenfeld).
-* 🖼️ **Live-Visualisierung** der rohen SubQG-Knotenkarte.
-* 🌊 **Animierte Visualisierung** des Harmony Scores als dynamische Farbwelle.
-* 🔍 Doppelte Bildanzeige (Vorher / Nachher).
-* 📊 Detaillierte Statistiken zur SubQG-Analyse & visuellen Harmonie.
-* 💾 Downloadfunktion für transformierte Bilder.
-* 📱 Responsive Design für verschiedene Bildschirmgrößen.
-* 🖼️ Unterstützung für SVG-Dateien als Input (werden clientseitig gerastert).
+Die Hauptkomponenten sind:
 
----
+*   `index.html`: Einstiegspunkt.
+*   `index.tsx`: Mountet die React-Anwendung.
+*   `App.tsx`: Hauptkomponente, verwaltet den Simulationszustand, die Einstellungen und den Simulationsloop.
+*   `types.ts`: Definiert TypeScript-Interfaces und Enums.
+*   `constants.ts`: Enthält jetzt `DEFAULT_SIMULATION_SETTINGS`, `PRESETS` und einige statische Konstanten.
+*   `services/simulationService.ts`: Kernlogik der Simulation, Agentenverhalten, SQS-Implementierung. Nimmt nun `SimulationSettings` entgegen.
+*   `services/geminiService.ts`: Interaktion mit der Gemini API.
+*   `components/`:
+    *   `GridDisplay.tsx`: Rendert das Gitter und die Agenten.
+    *   `ResourceCell.tsx`: Rendert eine einzelne Zelle.
+    *   `AgentSprite.tsx`: Rendert einen Agenten.
+    *   `InfoPanel.tsx`: Zeigt Simulationsdetails an.
+    *   `SettingsPanel.tsx`: (Neu) UI zur dynamischen Anpassung von Simulationsparametern.
+*   `README.md`: Diese Datei.
 
-## Technologie-Stack
+## 9. Setup und Start
 
-* **Frontend:** React, TypeScript
-* **Styling:** Tailwind CSS
-* **State-Handling:** React Hooks (useState, useCallback, useEffect, useRef)
-* **Bildgenerierung (optional):** Google Gemini API (`@google/genai` via `esm.sh`)
-* **Client-seitige Bildverarbeitung:** Canvas API
-* **Buildsystem (impliziert für `process.env.API_KEY`):** Vite, Webpack, Parcel oder ähnliches.
+Da die Anwendung auf `esm.sh` für das Laden von Modulen setzt, ist kein lokaler Build-Schritt oder `npm install` zwingend notwendig, um die Kernfunktionalität im Browser zu testen, solange eine Internetverbindung besteht.
 
----
+1.  **API-Schlüssel (Optional, für Narrative):**
+    *   Um die narrative Generierung durch die Gemini API zu nutzen, benötigen Sie einen API-Schlüssel von Google AI Studio.
+    *   Dieser Schlüssel muss in Ihrer Umgebung als `process.env.API_KEY` verfügbar sein. Da dies eine reine Frontend-Anwendung ist, die direkt im Browser läuft, ist das Setzen von `process.env` nicht direkt wie in Node.js möglich. Für lokale Entwicklung oder einfache Tests könnte man den API-Schlüssel temporär direkt im Code (`geminiService.ts`) einsetzen (NICHT FÜR PRODUKTION EMPFOHLEN!) oder über einen lokalen Entwicklungsserver bereitstellen, der Umgebungsvariablen injizieren kann. **Achtung: API-Schlüssel niemals öffentlich in Client-seitigem Code exponieren!** Für dieses Projekt wird angenommen, dass `process.env.API_KEY` irgendwie im Ausführungskontext verfügbar gemacht wird (z.B. durch ein übergeordnetes Framework oder manuelle Einrichtung beim lokalen Testen).
+2.  **Öffnen:**
+    *   Laden Sie die Dateien herunter.
+    *   Öffnen Sie die `index.html` Datei in einem modernen Webbrowser.
+3.  **Interagieren:**
+    *   Nutzen Sie die Steuerelemente, um die Simulation zu starten, pausieren oder zurückzusetzen.
+    *   Öffnen Sie das Einstellungspanel, um Parameter anzupassen und Presets zu laden.
+    *   Beobachten Sie das Verhalten der Agenten und die Auswirkungen der SQS-Ereignisse.
 
-## Hinweis zur Originalität & Urheberrecht
-
-Die transformierten Bilder sind **algorithmisch generierte Einzelstücke**.
-
-* Es handelt sich nicht um einen einfachen Filter oder eine Kopie des Originalbildes.
-* Jeder Pixel des Ausgabebildes wird auf Basis einer komplexen Simulation und mathematischer Transformationen neu berechnet.
-* Dadurch entsteht ein **neues, eigenständiges digitales Werk**, das zwar vom Original inspiriert sein kann, aber eine eigene algorithmische Signatur trägt – vergleichbar mit der Interpretation eines Themas durch einen Künstler in einem anderen Medium oder Stil.
-* Die Nutzung fremder Bildquellen als Basis für die Transformation impliziert nicht notwendigerweise eine Urheberrechtsverletzung, da keine direkte Reproduktion des geschützten Werkes stattfindet, sondern eine tiefgreifende algorithmische Neuinterpretation. Die rechtliche Bewertung kann jedoch im Einzelfall komplex sein.
-
----
-
-## Setup & Start (Entwickler)
-
-### Voraussetzungen
-
-* Ein moderner Webbrowser.
-* Für die optionale Bildgenerierung via Gemini: Ein gültiger Google Gemini API-Key.
-
-### `.env` Konfiguration (Bei Verwendung eines Bundlers)
-
-Wenn Sie die Anwendung lokal mit einem Build-Tool (wie Vite, Webpack, Parcel) entwickeln, das `process.env`-Variablen unterstützt, erstellen Sie eine `.env`-Datei im Stammverzeichnis des Projekts:
-
-```env
-VITE_API_KEY=DEIN_GEMINI_API_KEY
-```
-*(Das Präfix `VITE_` ist spezifisch für Vite. Andere Bundler können andere Konventionen haben, z.B. `REACT_APP_` für Create React App.)*
-
-> Achten Sie darauf, dass Ihr Bundler so konfiguriert ist, dass `process.env.API_KEY` (oder die bundlerspezifische Variable) im Code korrekt durch den tatsächlichen Wert ersetzt wird. Die `index.html` in diesem Projekt ist für den direkten Einsatz mit `esm.sh` und einem global verfügbaren `process.env.API_KEY` (während des Build-Prozesses injiziert) konzipiert.
-
-### Installation (Bei Verwendung eines Bundlers)
-
-```bash
-npm install
-# oder
-yarn install
-```
-
-### Starten der Anwendung (Bei Verwendung eines Bundlers)
-
-```bash
-npm run dev
-# oder
-yarn dev
-```
-
-Die Anwendung wird typischerweise unter `http://localhost:PORT` (z.B. `http://localhost:5173` für Vite) verfügbar sein.
-
-### Direkter Start (Ohne Bundler - nur für einfache Tests mit Einschränkungen)
-Die `index.html` ist so strukturiert, dass sie theoretisch direkt im Browser geöffnet werden kann, wenn der API-Key für Gemini manuell im Code (z.B. in `services/geminiService.ts` oder global) verfügbar gemacht wird. Dies wird jedoch für die Entwicklung oder den produktiven Einsatz **nicht empfohlen**, da die Handhabung von API-Keys clientseitig sicherheitskritisch ist. Die bevorzugte Methode ist die Verwendung eines Bundlers und Umgebungsvariablen.
-
----
+Die Anwendung ist darauf ausgelegt, die Komplexität und Unvorhersehbarkeit von Systemen zu demonstrieren, die von vielschichtigen, sich verändernden Bedingungen beeinflusst werden.
